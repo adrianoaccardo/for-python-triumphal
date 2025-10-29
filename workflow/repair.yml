@@ -1,0 +1,56 @@
+name: Repair Workflow
+
+on:
+  workflow_call:
+    inputs:
+      component:
+        required: true
+        type: string
+        description: 'Component to repair (deps, docker, tts, gui)'
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: pip
+          
+      - name: Repair dependencies
+        if: inputs.component == 'deps'
+        run: |
+          pip cache purge
+          pip install --upgrade pip
+          pip install --no-cache-dir -r requirements.txt
+          
+      - name: Repair Docker
+        if: inputs.component == 'docker'
+        run: |
+          docker system prune -f
+          docker build --no-cache -t suno-repair .
+          
+      - name: Repair TTS
+        if: inputs.component == 'tts'
+        run: |
+          pip install --upgrade torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+          pip install --upgrade soundfile numpy
+          
+      - name: Repair GUI
+        if: inputs.component == 'gui'
+        run: |
+          pkill -f "python app.py" || true
+          pip install --upgrade gradio
+          
+      - name: Verify repair
+        run: |
+          case "${{ inputs.component }}" in
+            deps) python -c "import sys; print(f'Python {sys.version} OK')" ;;
+            docker) docker images | grep suno-repair ;;
+            tts) python -c "import torch; print(f'Torch {torch.__version__} OK')" ;;
+            gui) python -c "import gradio; print(f'Gradio {gradio.__version__} OK')" ;;
+          esac
