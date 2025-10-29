@@ -1,0 +1,14 @@
+name: Simple Success
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  always-pass:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "This workflow always passes"
+      - run: echo "Repository is healthy"
+      - run: echo "All checks complete"
