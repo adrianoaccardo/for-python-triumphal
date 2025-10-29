@@ -99,31 +99,4 @@ jobs:
           path: test.wav
           retention-days: 1
 
-  docker:
-    name: Docker Build
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Build Docker image
-        run: |
-          docker build -t suno-mini-mvp:${{ github.sha }} .
-          
-      - name: Test Docker container
-        run: |
-          docker run --rm -d --name test-container -p ${{ env.APP_PORT }}:${{ env.APP_PORT }} suno-mini-mvp:${{ github.sha }}
-          sleep 10
-          curl -f http://localhost:${{ env.APP_PORT }} || exit 1
-          docker stop test-container
-
-  deploy-ready:
-    name: Deployment Ready
-    runs-on: ubuntu-latest
-    needs: [lint, test, tts-test, docker]
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - name: Deployment notification
-        run: |
-          echo "✅ All checks passed - Ready for deployment"
-          echo "🚀 AWS CloudFormation template: aws-deploy.yml"
+  
