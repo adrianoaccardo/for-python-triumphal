@@ -53,11 +53,11 @@ def ensure_silero_loaded(language: str = "en", speaker: str = "v3_en") -> None:
     _silero_loaded = True
 
 
-def silero_tts(text: str, language: str = "en", speaker: str = "v3_en") -> str:
-    ensure_silero_loaded(language=language, speaker=speaker)
+def silero_tts(text: str, language: str = "en", speaker: str = "en_0") -> str:
+    ensure_silero_loaded(language=language, speaker="v3_en")
 
     wav = _silero_model.apply_tts(
-        texts=text, speaker=speaker, sample_rate=TTS_SAMPLE_RATE
+        text=text, speaker=speaker, sample_rate=TTS_SAMPLE_RATE
     )
 
     if not isinstance(wav, np.ndarray):
@@ -118,7 +118,7 @@ with gr.Blocks(title="mini-suno-mvp") as demo:
         )
 
         lang = gr.Dropdown(choices=["en", "it", "es", "ru"], value="en")
-        speaker = gr.Textbox(label="Speaker (Silero)", value="v3_en")
+        speaker = gr.Textbox(label="Speaker (Silero)", value="en_0")
         btn = gr.Button("Genera parlato")
         out = gr.Audio()
         status_tts = gr.Textbox(interactive=False, label="Status")
