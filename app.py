@@ -1,31 +1,23 @@
 # mini-suno-mvp - Gradio app: TTS (Silero) and MusicGen integration (optional).
-import os
-import tempfile
 from typing import Any
+import traceback
 
 import numpy as np
-import soundfile as sf
 import gradio as gr
+
+from audio_utils import save_wave_np, TTS_SAMPLE_RATE, MUSIC_SAMPLE_RATE
 
 try:
     import torch
     _TORCH_AVAILABLE = True
-except Exception:
+except ImportError:
     _TORCH_AVAILABLE = False
-
-
-def save_wave_np(wave: np.ndarray, sr: int = 22050) -> str:
-    fd, path = tempfile.mkstemp(suffix=".wav")
-    os.close(fd)
-    sf.write(path, wave, samplerate=sr, subtype='PCM_16')
-    return path
 
 
 # Silero TTS (via torch.hub)
 _silero_loaded: bool = False
 _silero_model: Any = None
 _silero_utils: Any = None
-_silero_sample_rate: int = 48000
 
 
 def ensure_silero_loaded(language: str = "en", speaker: str = "v3_en") -> None:
@@ -33,7 +25,7 @@ def ensure_silero_loaded(language: str = "en", speaker: str = "v3_en") -> None:
 
     Raises RuntimeError when torch isn't available.
     """
-    global _silero_loaded, _silero_model, _silero_utils, _silero_sample_rate
+    global _silero_loaded, _silero_model, _silero_utils
 
     if _silero_loaded:
         return
@@ -56,8 +48,6 @@ def ensure_silero_loaded(language: str = "en", speaker: str = "v3_en") -> None:
     else:
         _silero_model = res
         _silero_utils = None
-
-    _silero_sample_rate = 48000
     _silero_loaded = True
 
 
@@ -65,16 +55,13 @@ def silero_tts(text: str, language: str = "en", speaker: str = "v3_en") -> str:
     ensure_silero_loaded(language=language, speaker=speaker)
 
     wav = _silero_model.apply_tts(
-        texts=text, speaker=speaker, sample_rate=_silero_sample_rate
+        texts=text, speaker=speaker, sample_rate=TTS_SAMPLE_RATE
     )
 
     if not isinstance(wav, np.ndarray):
         wav = wav.cpu().numpy()
 
-    if wav.dtype != np.float32:
-        wav = wav.astype(np.float32)
-
-    return save_wave_np(wav, sr=_silero_sample_rate)
+    return save_wave_np(wav, sr=TTS_SAMPLE_RATE)
 
 
 # MusicGen integration (optional)
@@ -97,7 +84,12 @@ def ensure_musicgen_loaded(
     if _musicgen_available:
         return
 
-    from musicgen import MusicGen
+    try:
+        from musicgen import MusicGen
+    except ImportError:
+        raise RuntimeError(
+            "Pacchetto musicgen non trovato. Installalo da GitHub per usare questa funzionalità."
+        )
 
     _musicgen_model = MusicGen.get_pretrained(model_size)
     _musicgen_model.to(device)
@@ -117,12 +109,10 @@ def musicgen_generate(
     # wav can be a list/tuple of arrays or a single array
     arr = wav[0] if isinstance(wav, (list, tuple)) else wav
 
-    sr = 32000
-
     if not isinstance(arr, np.ndarray):
         arr = arr.cpu().numpy()
 
-    return save_wave_np(arr, sr=sr)
+    return save_wave_np(arr, sr=MUSIC_SAMPLE_RATE)
 
 
 with gr.Blocks(title="mini-suno-mvp") as demo:
@@ -138,15 +128,17 @@ with gr.Blocks(title="mini-suno-mvp") as demo:
         speaker = gr.Textbox(label="Speaker (Silero)", value="v3_en")
         btn = gr.Button("Genera parlato")
         out = gr.Audio()
-        
+        status_tts = gr.Textbox(interactive=False, label="Status")
+
         def run_tts(t, language, sp):
             try:
-                return silero_tts(t, language=language, speaker=sp)
+                path = silero_tts(t, language=language, speaker=sp)
+                return path, "Successo!"
             except Exception:
-                # swallow the error for the UI; this keeps the exception
-                # variable from being unused (flake8 F841)
-                return None
-        btn.click(run_tts, inputs=[txt, lang, speaker], outputs=[out])
+                # Use traceback to get detailed error for the status
+                detailed_error = traceback.format_exc()
+                return None, f"Errore: {detailed_error}"
+        btn.click(run_tts, inputs=[txt, lang, speaker], outputs=[out, status_tts])
 
     with gr.Tab("Text→Music"):
         prompt = gr.Textbox(
@@ -164,21 +156,22 @@ with gr.Blocks(title="mini-suno-mvp") as demo:
         device = gr.Dropdown(choices=["cuda", "cpu"], value="cuda")
         btn2 = gr.Button("Genera musica")
         out2 = gr.Audio()
-        status = gr.Textbox(interactive=False)
-        
+        status_music = gr.Textbox(interactive=False, label="Status")
+
         def run_music(p, d, ms, dev):
             try:
                 res = musicgen_generate(
                     p, duration=int(d), model_size=ms, device=dev
                 )
-                return res, ""
-            except Exception as e:
-                return None, str(e)
+                return res, "Successo!"
+            except Exception:
+                detailed_error = traceback.format_exc()
+                return None, f"Errore: {detailed_error}"
 
         btn2.click(
             run_music,
             inputs=[prompt, duration, model_size, device],
-            outputs=[out2, status],
+            outputs=[out2, status_music],
         )
 
 if __name__ == "__main__":
