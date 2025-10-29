@@ -19,18 +19,6 @@ env:
   ARTIFACT_NAME: "suno-mini-mvp-artifacts"
   MAX_RETRIES: "5"
 
-steps:
-  - name: Build image
-    run: docker build . -t app:latest || true
-  - name: Fallback build (no cache)
-    if: failure()
-    run: docker build . -t app:nocache --no-cache
-  - name: MCP hint (docker)
-    if: failure()
-    run: |
-      mkdir -p .vscode
-      echo 'Prompt: Analizza Dockerfile e proponi fix (pin base, apt mirrors).' > .vscode/MCP_HINT_DOCKER.md
-
 jobs:
   lint:
     name: Lint and static checks (guarded + MCP hints)
@@ -132,8 +120,19 @@ jobs:
           name: lint-logs
           path: .
           retention-days: 3
+steps:
+  - name: Build image
+    run: docker build . -t app:latest || true
+  - name: Fallback build (no cache)
+    if: failure()
+    run: docker build . -t app:nocache --no-cache
+  - name: MCP hint (docker)
+    if: failure()
+    run: |
+      mkdir -p .vscode
+      echo 'Prompt: Analizza Dockerfile e proponi fix (pin base, apt mirrors).' > .vscode/MCP_HINT_DOCKER.md
 
-  unit-tests:
+unit-tests:
     name: Unit tests (guarded + MCP hints)
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -215,7 +214,7 @@ jobs:
           path: .
           retention-days: 3
 
-  tts-smoke:
+tts-smoke:
     name: TTS Silero smoke on CPU (guarded + MCP hints)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -308,7 +307,7 @@ jobs:
             tts_fallback.wav
           retention-days: 7
 
-  gradio-smoke:
+gradio-smoke:
     name: Gradio UI smoke with audio sample (guarded + MCP hints)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -420,7 +419,7 @@ jobs:
             music_demo.wav
           retention-days: 7
 
-  docker-build:
+docker-build:
     name: Docker build (guarded + MCP hints)
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -449,12 +448,12 @@ jobs:
         if: always()
         run: docker images | grep suno-mini-mvp || echo "Image not listed (check build logs)"
 
-  bundle-artifacts:
-    name: Bundle artifacts
-    runs-on: ubuntu-latest
-    needs: [tts-smoke, gradio-smoke]
-    timeout-minutes: 10
-    steps:
+    bundle-artifacts:
+      name: Bundle artifacts
+      runs-on: ubuntu-latest
+      needs: [tts-smoke, gradio-smoke]
+      timeout-minutes: 10
+      steps:
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -485,7 +484,7 @@ jobs:
           retention-days: 7
       - name: Install deps with retry
         env:
-        MAX_RETRIES: 5
+          MAX_RETRIES: 5
         run: |
           set -e
           n=0
