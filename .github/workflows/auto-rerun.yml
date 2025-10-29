@@ -1,0 +1,30 @@
+name: AutoRerunOnFailure
+on:
+  workflow_run:
+    workflows: [ "Suno-Quantum-Ultra-Resilient-Guarded-MCP" ]
+    types: [ "completed" ]
+
+jobs:
+  rerun:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute rerun budget
+        id: budget
+        run: |
+          MAX=2
+          RUNNUM=${{ github.event.workflow_run.run_attempt }}
+          echo "max=$MAX" >> $GITHUB_OUTPUT
+          echo "runnum=$RUNNUM" >> $GITHUB_OUTPUT
+
+      - name: Rerun if under budget
+        if: ${{ steps.budget.outputs.runnum < steps.budget.outputs.max }}
+        run: |
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/rerun
+
+      - name: Log stop when budget reached
+        if: ${{ steps.budget.outputs.runnum >= steps.budget.outputs.max }}
+        run: echo "Rerun budget reached; stopping to avoid loops."
