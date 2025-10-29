@@ -1,3 +1,31 @@
+# suno-mini-mvp
+
+Repo minimale per creare una UI tipo "Suno" che fa:
+- TTS (parlato) funzionante su CPU usando Silero (torch.hub).
+- Text→Music: integrazione pronta per MusicGen (richiede GPU / Colab; il codice è pronto).
+- Gradio web UI per provare tutto in locale o in Codespaces.
+
+Cose importanti:
+- Il TTS con Silero funziona su CPU in Codespaces/locale (clip brevi). È vero TTS, niente placeholder.
+- La generazione musicale (MusicGen) richiede GPU per essere pratica; ho incluso integrazione reale che funziona se installi `musicgen` e hai GPU o su Colab.
+- Non includo pesi proprietari: il codice scarica modelli open-source dal loro hub quando necessario.
+
+How-to (locale)
+1) python -m venv .venv
+   source .venv/bin/activate   # Linux / Mac
+   .venv\Scripts\activate      # Windows
+   pip install -r requirements.txt
+
+2) python app.py
+   Apri http://localhost:7860
+
+Codespaces / Gitpod
+- Pusha questi file nel repo, poi apri il repo in Codespaces (Code → Open with Codespaces) su branch suno-mvp.
+- Il devcontainer installerà le dipendenze base. Nota: Codespaces non fornisce GPU di default.
+
+Se vuoi generare musica in GPU gratis: usa il notebook Colab che preparo (scrivi "COLAB") e lì MusicGen girerà.
+
+
 # 🐍 for-python-triumphal
 
 Welcome to my personal repository documenting a structured and intentional journey into the world of computer science and software engineering. After finally carving out the time, I'm diving deep into foundational concepts, practical skills, and real-world applications.
