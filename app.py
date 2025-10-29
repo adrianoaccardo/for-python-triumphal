@@ -4,8 +4,10 @@ import traceback
 
 import numpy as np
 import gradio as gr
-
+import torch
+from transformers import AutoProcessor, MusicgenForConditionalGeneration
 from audio_utils import save_wave_np, TTS_SAMPLE_RATE, MUSIC_SAMPLE_RATE
+import scipy
 
 try:
     import torch
@@ -65,54 +67,35 @@ def silero_tts(text: str, language: str = "en", speaker: str = "v3_en") -> str:
 
 
 # MusicGen integration (optional)
-_musicgen_available: bool = False
-_musicgen_model: Any = None
-
-
-def ensure_musicgen_loaded(
-    model_size: str = "small",
-    device: str = "cuda",
-) -> None:
-    """Lazy-load MusicGen model when available.
-
-    This function imports the optional `musicgen` package at runtime so the
-    repository can be used without that dependency installed.
-    """
-
-    global _musicgen_available, _musicgen_model
-
-    if _musicgen_available:
-        return
-
-    try:
-        from musicgen import MusicGen
-    except ImportError:
-        raise RuntimeError(
-            "Pacchetto musicgen non trovato. Installalo da GitHub per usare questa funzionalità."
-        )
-
-    _musicgen_model = MusicGen.get_pretrained(model_size)
-    _musicgen_model.to(device)
-    _musicgen_available = True
+processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
+model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
 
 
 def musicgen_generate(
     prompt: str,
     duration: int = 8,
-    model_size: str = "small",
-    device: str = "cuda",
 ) -> str:
-    ensure_musicgen_loaded(model_size=model_size, device=device)
 
-    wav = _musicgen_model.generate([prompt], duration=duration)
+    inputs = processor(
+        text=[prompt],
+        padding=True,
+        return_tensors="pt",
+    )
 
-    # wav can be a list/tuple of arrays or a single array
-    arr = wav[0] if isinstance(wav, (list, tuple)) else wav
+    audio_values = model.generate(**inputs, max_new_tokens=int(duration * 256 / 50))
+    
+    sampling_rate = model.config.audio_encoder.sampling_rate
+    audio_numpy = audio_values.cpu().numpy()
+    
+    # The output is a batch, so we take the first element
+    audio_numpy = audio_numpy[0]
 
-    if not isinstance(arr, np.ndarray):
-        arr = arr.cpu().numpy()
+    # The output of the model is mono, so we don't need to average channels.
+    # The shape is (num_channels, num_samples), but since it's mono, it's (1, num_samples)
+    # We need to flatten it to (num_samples,)
+    audio_numpy = audio_numpy.flatten()
 
-    return save_wave_np(arr, sr=MUSIC_SAMPLE_RATE)
+    return save_wave_np(audio_numpy, sr=sampling_rate)
 
 
 with gr.Blocks(title="mini-suno-mvp") as demo:
@@ -143,25 +126,20 @@ with gr.Blocks(title="mini-suno-mvp") as demo:
     with gr.Tab("Text→Music"):
         prompt = gr.Textbox(
             label="Prompt musicale",
-            value="Calm ambient pad with soft melody",
+            value="A beautiful piano melody",
             lines=3,
         )
 
         duration = gr.Slider(2, 30, value=8, step=1)
 
-        model_size = gr.Dropdown(
-            choices=["small", "medium", "large"], value="small"
-        )
-
-        device = gr.Dropdown(choices=["cuda", "cpu"], value="cuda")
         btn2 = gr.Button("Genera musica")
         out2 = gr.Audio()
         status_music = gr.Textbox(interactive=False, label="Status")
 
-        def run_music(p, d, ms, dev):
+        def run_music(p, d):
             try:
                 res = musicgen_generate(
-                    p, duration=int(d), model_size=ms, device=dev
+                    p, duration=int(d)
                 )
                 return res, "Successo!"
             except Exception:
@@ -170,7 +148,7 @@ with gr.Blocks(title="mini-suno-mvp") as demo:
 
         btn2.click(
             run_music,
-            inputs=[prompt, duration, model_size, device],
+            inputs=[prompt, duration],
             outputs=[out2, status_music],
         )
 
