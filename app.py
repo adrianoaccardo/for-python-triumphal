@@ -67,24 +67,34 @@ def silero_tts(text: str, language: str = "en", speaker: str = "v3_en") -> str:
 
 
 # MusicGen integration (optional)
-processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
-model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+_musicgen_model: Any = None
+_musicgen_processor: Any = None
 
+def ensure_musicgen_loaded() -> None:
+    """Lazy-load MusicGen model and processor."""
+    global _musicgen_model, _musicgen_processor
+
+    if _musicgen_model is not None and _musicgen_processor is not None:
+        return
+
+    _musicgen_processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
+    _musicgen_model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
 
 def musicgen_generate(
     prompt: str,
     duration: int = 8,
 ) -> str:
+    ensure_musicgen_loaded()
 
-    inputs = processor(
+    inputs = _musicgen_processor(
         text=[prompt],
         padding=True,
         return_tensors="pt",
     )
 
-    audio_values = model.generate(**inputs, max_new_tokens=int(duration * 256 / 50))
+    audio_values = _musicgen_model.generate(**inputs, max_new_tokens=int(duration * 256 / 50))
     
-    sampling_rate = model.config.audio_encoder.sampling_rate
+    sampling_rate = _musicgen_model.config.audio_encoder.sampling_rate
     audio_numpy = audio_values.cpu().numpy()
     
     # The output is a batch, so we take the first element
@@ -138,6 +148,7 @@ with gr.Blocks(title="mini-suno-mvp") as demo:
 
         def run_music(p, d):
             try:
+                status_music.update("Loading model...")
                 res = musicgen_generate(
                     p, duration=int(d)
                 )

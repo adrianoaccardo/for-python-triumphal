@@ -5,6 +5,8 @@ numpy
 soundfile
 librosa
 ffmpeg-python
+transformers
+accelerate
 
 # Testing
 pytest
