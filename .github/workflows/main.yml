@@ -55,8 +55,7 @@ try:
     print("PyTorch imported successfully")
     print("Basic test passed")
 except Exception as e:
-    print(f"Import test failed: {e}")
-' || echo "TTS test skipped"
-          
+    print(f"Basic test failed: {e}")
+' || echo "Simple TTS test failed"
       - name: Success marker
         run: echo "Workflow completed - some steps may have failed but that is OK"
