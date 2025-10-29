@@ -1,4 +1,4 @@
-# mini-suno-mvp - Gradio app con TTS (Silero) e integrazione MusicGen (opzionale).
+# mini-suno-mvp - Gradio app: TTS (Silero) and MusicGen integration (optional).
 import os
 import tempfile
 from typing import Any
@@ -13,17 +13,20 @@ try:
 except Exception:
     _TORCH_AVAILABLE = False
 
+
 def save_wave_np(wave: np.ndarray, sr: int = 22050) -> str:
     fd, path = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
     sf.write(path, wave, samplerate=sr, subtype='PCM_16')
     return path
 
+
 # Silero TTS (via torch.hub)
 _silero_loaded: bool = False
 _silero_model: Any = None
 _silero_utils: Any = None
 _silero_sample_rate: int = 48000
+
 
 def ensure_silero_loaded(language: str = "en", speaker: str = "v3_en") -> None:
     """Lazy-load Silero TTS model via torch.hub.
@@ -41,15 +44,22 @@ def ensure_silero_loaded(language: str = "en", speaker: str = "v3_en") -> None:
         )
 
     # Wrap arguments to keep line lengths under 79 chars for flake8
-    _silero_model, _silero_utils = torch.hub.load(
+    res = torch.hub.load(
         repo_or_dir="snakers4/silero-models",
         model="silero_tts",
         language=language,
         speaker=speaker,
     )
 
+    if isinstance(res, (list, tuple)) and len(res) >= 2:
+        _silero_model, _silero_utils = res[0], res[1]
+    else:
+        _silero_model = res
+        _silero_utils = None
+
     _silero_sample_rate = 48000
     _silero_loaded = True
+
 
 def silero_tts(text: str, language: str = "en", speaker: str = "v3_en") -> str:
     ensure_silero_loaded(language=language, speaker=speaker)
@@ -66,11 +76,16 @@ def silero_tts(text: str, language: str = "en", speaker: str = "v3_en") -> str:
 
     return save_wave_np(wav, sr=_silero_sample_rate)
 
+
 # MusicGen integration (optional)
 _musicgen_available: bool = False
 _musicgen_model: Any = None
 
-def ensure_musicgen_loaded(model_size: str = "small", device: str = "cuda") -> None:
+
+def ensure_musicgen_loaded(
+    model_size: str = "small",
+    device: str = "cuda",
+) -> None:
     """Lazy-load MusicGen model when available.
 
     This function imports the optional `musicgen` package at runtime so the
@@ -88,8 +103,12 @@ def ensure_musicgen_loaded(model_size: str = "small", device: str = "cuda") -> N
     _musicgen_model.to(device)
     _musicgen_available = True
 
+
 def musicgen_generate(
-    prompt: str, duration: int = 8, model_size: str = "small", device: str = "cuda"
+    prompt: str,
+    duration: int = 8,
+    model_size: str = "small",
+    device: str = "cuda",
 ) -> str:
     ensure_musicgen_loaded(model_size=model_size, device=device)
 
@@ -105,14 +124,21 @@ def musicgen_generate(
 
     return save_wave_np(arr, sr=sr)
 
+
 with gr.Blocks(title="mini-suno-mvp") as demo:
     gr.Markdown("<h2>mini-suno-mvp — TTS reale + MusicGen (opzionale)</h2>")
     with gr.Tab("TTS"):
-        txt = gr.Textbox(label="Testo", value="Ciao, questo è un test", lines=3)
-        lang = gr.Dropdown(choices=["en","it","es","ru"], value="en")
+        txt = gr.Textbox(
+            label="Testo",
+            value="Ciao, questo è un test",
+            lines=3,
+        )
+
+        lang = gr.Dropdown(choices=["en", "it", "es", "ru"], value="en")
         speaker = gr.Textbox(label="Speaker (Silero)", value="v3_en")
         btn = gr.Button("Genera parlato")
         out = gr.Audio()
+        
         def run_tts(t, language, sp):
             try:
                 return silero_tts(t, language=language, speaker=sp)
@@ -139,12 +165,21 @@ with gr.Blocks(title="mini-suno-mvp") as demo:
         btn2 = gr.Button("Genera musica")
         out2 = gr.Audio()
         status = gr.Textbox(interactive=False)
+        
         def run_music(p, d, ms, dev):
             try:
-                return musicgen_generate(p, duration=int(d), model_size=ms, device=dev), ""
+                res = musicgen_generate(
+                    p, duration=int(d), model_size=ms, device=dev
+                )
+                return res, ""
             except Exception as e:
                 return None, str(e)
-        btn2.click(run_music, inputs=[prompt, duration, model_size, device], outputs=[out2, status])
+
+        btn2.click(
+            run_music,
+            inputs=[prompt, duration, model_size, device],
+            outputs=[out2, status],
+        )
 
 if __name__ == "__main__":
     demo.launch(server_name="0.0.0.0", share=False)
