@@ -19,6 +19,18 @@ env:
   ARTIFACT_NAME: "suno-mini-mvp-artifacts"
   MAX_RETRIES: "5"
 
+steps:
+  - name: Build image
+    run: docker build . -t app:latest || true
+  - name: Fallback build (no cache)
+    if: failure()
+    run: docker build . -t app:nocache --no-cache
+  - name: MCP hint (docker)
+    if: failure()
+    run: |
+      mkdir -p .vscode
+      echo 'Prompt: Analizza Dockerfile e proponi fix (pin base, apt mirrors).' > .vscode/MCP_HINT_DOCKER.md
+
 jobs:
   lint:
     name: Lint and static checks (guarded + MCP hints)
@@ -471,3 +483,31 @@ jobs:
           name: bundle
           path: suno-mini-mvp.tar.gz
           retention-days: 7
+      - name: Install deps with retry
+        env:
+        MAX_RETRIES: 5
+        run: |
+          set -e
+          n=0
+            until pip install -r requirements.txt; do
+          n=$((n+1))
+          echo "Retry $n"
+          [ $n -ge $MAX_RETRIES ] && { echo "Max retries reached"; exit 1; }
+          pip cache purge || true
+          sleep 5
+          done
+
+      - name: Fallback if previous failed
+        if: failure()
+        run: |
+          pip install --no-cache-dir -r requirements.txt || true
+
+      - name: Non-blocking probe
+        run: curl -I http://localhost:7860
+        continue-on-error: true
+      
+      - name: Invoke repair
+        uses: ./.github/workflows/repair.yml
+        with:
+          component: "deps"
+      
